@@ -1,1 +1,52 @@
+---
+- name: Build WAR on Ansible Workstation
+  hosts: localhost
+  tasks:
+    - name: Clone project repo
+      git:
+        repo: "https://github.com/Ashu2356/my-web-app.git"
+        dest: "/tmp/my-web-app"
+        version: main
+
+    - name: Build WAR using Maven
+      command: mvn package -f /tmp/my-web-app/pom.xml
+
+    - name: Copy WAR to target host
+      copy:
+        src: "/tmp/my-web-app/target/my-web-app.war"
+        dest: "/tmp/my-web-app.war"
+      delegate_to: "{{ item }}"
+      with_items: "{{ groups['tag_target-host'] }}"
+
+- name: Setup Tomcat and Deploy WAR on Target Host
+  hosts: tag_target-host
+  become: yes
+  tasks:
+    - name: Install Java
+      package:
+        name: java-17-openjdk
+        state: present
+
+    - name: Download Tomcat
+      get_url:
+        url: https://archive.apache.org/dist/tomcat/tomcat-9/v9.0.85/bin/apache-tomcat-9.0.85.tar.gz
+        dest: /tmp/apache-tomcat.tar.gz
+
+    - name: Extract Tomcat
+      unarchive:
+        src: /tmp/apache-tomcat.tar.gz
+        dest: /opt/tomcat
+        remote_src: yes
+        extra_opts: [--strip-components=1]
+
+    - name: Deploy WAR
+      copy:
+        src: /tmp/my-web-app.war
+        dest: /opt/tomcat/webapps/my-web-app.war
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Start Tomcat
+      command: /opt/tomcat/bin/startup.sh
 
